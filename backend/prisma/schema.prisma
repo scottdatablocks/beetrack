@@ -1,0 +1,117 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id       String    @id @default(uuid())
+  name     String
+  projects Project[]
+  alerts   Alert[]
+
+  @@map("tenants")
+}
+
+model Project {
+  id                String      @id @default(uuid())
+  tenantId          String      @map("tenant_id")
+  name              String
+  needByDate        DateTime?   @map("need_by_date") @db.Date
+  dailyDelayCost    Int?        @map("daily_delay_cost")
+  criticalPathJson  Json?       @map("critical_path_json")
+  tenant            Tenant      @relation(fields: [tenantId], references: [id])
+  orderLines        OrderLine[]
+  alerts            Alert[]
+
+  @@map("projects")
+}
+
+model OrderLine {
+  id              String    @id @default(uuid())
+  projectId       String    @map("project_id")
+  partId          String?   @map("part_id")
+  requiredOnSite  DateTime? @map("required_on_site") @db.Date
+  etaDate         DateTime? @map("eta_date") @db.Date
+  isCriticalPath  Boolean   @default(false) @map("is_critical_path")
+  project         Project   @relation(fields: [projectId], references: [id])
+  alerts          Alert[]
+
+  @@map("order_lines")
+}
+
+model Alert {
+  id             String     @id @default(uuid())
+  tenantId       String     @map("tenant_id")
+  projectId      String     @map("project_id")
+  orderLineId    String?    @map("order_line_id")
+  bufferPiercing Float?     @map("buffer_piercing")
+  roiAtStake     Decimal?   @map("roi_at_stake") @db.Decimal(12, 2)
+  severity       String?    @db.VarChar(50)
+  status         String     @default("open") @db.VarChar(50)
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant         Tenant     @relation(fields: [tenantId], references: [id])
+  project        Project    @relation(fields: [projectId], references: [id])
+  orderLine      OrderLine? @relation(fields: [orderLineId], references: [id])
+  decisions      Decision[]
+
+  @@map("alerts")
+}
+
+model Decision {
+  id            String    @id @default(uuid())
+  alertId       String?   @map("alert_id")
+  decisionToken String?   @unique @map("decision_token")
+  decisionType  String?   @map("decision_type") @db.VarChar(50)
+  decidedAt     DateTime? @map("decided_at") @db.Timestamptz(6)
+  decidedBy     String?   @map("decided_by")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  alert         Alert?    @relation(fields: [alertId], references: [id])
+
+  @@map("decisions")
+}
+
+model Vendor {
+  id                 String   @id @default(uuid())
+  name               String
+  category           String?  @db.VarChar(100)
+  reliabilityScore   Float?   @default(0.5) @map("reliability_score")
+  avgLeadTimeDays    Int?     @default(30) @map("avg_lead_time_days")
+  historicalDelays   Int?     @default(0) @map("historical_delays")
+  totalOrders        Int?     @default(0) @map("total_orders")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("vendors")
+}
+
+model Notification {
+  id              String    @id @default(uuid())
+  alertId         String?   @map("alert_id")
+  channel         String    @db.VarChar(50) // 'sms', 'slack', 'email'
+  recipient       String    @db.VarChar(255)
+  message         String    @db.Text
+  status          String    @default("pending") @db.VarChar(50) // 'pending', 'sent', 'failed'
+  sentAt          DateTime? @map("sent_at") @db.Timestamptz(6)
+  errorMessage    String?   @map("error_message") @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("notifications")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  auth0Id   String   @unique @map("auth0_id")
+  email     String   @unique
+  name      String?
+  role      String   @default("user") @db.VarChar(50) // 'user', 'pm', 'admin'
+  tenantId  String?  @map("tenant_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("users")
+}
